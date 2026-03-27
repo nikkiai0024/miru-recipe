@@ -1,30 +1,51 @@
 {
   "expo": {
-    "name": "recipe-app",
-    "slug": "recipe-app",
-    "version": "1.0.0",
+    "name": "ミルレシピ",
+    "slug": "miru-recipe",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "scheme": "mirurecipe",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FFF8F0"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mirurecipe.app",
+      "privacyPolicyUrl": "https://github.com/nikkiai0024/miru-recipe/blob/main/PRIVACY.md",
+      "buildNumber": "5"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FF6B35",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "package": "com.mirurecipe.app"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "extra": {
+      "youtubeApiKey": ""
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sharing",
+      "expo-font",
+      "expo-iap",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-1198964108696763~9247723338",
+          "iosAppId": "ca-app-pub-1198964108696763~4929204379"
+        }
+      ]
+    ]
   }
 }
