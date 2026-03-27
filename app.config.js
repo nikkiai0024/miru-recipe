@@ -5,7 +5,7 @@ module.exports = {
   expo: {
     name: "ミルレシピ",
     slug: "miru-recipe",
-    version: "1.0.1",
+    version: "1.0.2",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -18,7 +18,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.mirurecipe.app",
-      buildNumber: "5",
+      buildNumber: "7",
       privacyPolicyUrl: "https://github.com/nikkiai0024/miru-recipe/blob/main/PRIVACY.md",
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
