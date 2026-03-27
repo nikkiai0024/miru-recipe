@@ -38,7 +38,14 @@ export async function fetchVideoInfo(videoId: string): Promise<VideoInfo> {
 
   const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`;
 
-  const response = await fetch(url);
+  // iOSのAPIキー制限はX-Ios-Bundle-Identifierヘッダーで照合される
+  // fetch()はこのヘッダーを自動付与しないため明示的に指定が必要
+  const bundleId = Constants.expoConfig?.ios?.bundleIdentifier ?? 'com.mirurecipe.app';
+  const response = await fetch(url, {
+    headers: {
+      'X-Ios-Bundle-Identifier': bundleId,
+    },
+  });
   if (!response.ok) {
     // 403/401/429はAPI Key問題やレート制限 → oEmbedにフォールバック
     if (response.status === 403 || response.status === 401 || response.status === 429) {
