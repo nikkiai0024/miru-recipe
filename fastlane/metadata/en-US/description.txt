@@ -1,0 +1,17 @@
+"Where did I save that recipe?" — Never ask again.
+
+Paste any YouTube or Cookpad URL and our AI automatically extracts ingredients, steps & cooking time. Everything organized in one place.
+
+Cooking mode is a game changer. Built-in timers and voice-guided steps (Pro) mean your hands stay clean the whole time.
+
+【Key Features】
+・Auto-import from URL (YouTube, Cookpad, and more recipe sites)
+・AI analyzes ingredients, steps & cooking time
+・Cooking mode: step-by-step display with built-in timer
+・Favorites & category filters
+・Drag & drop to reorder your home screen
+
+【Pro Features】
+・Unlimited recipe imports (free plan: 5/month)
+・Voice readout & tap navigation in cooking mode
+・Shopping list: auto-extract ingredients as a checklist
