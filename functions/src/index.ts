@@ -8,6 +8,7 @@ setGlobalOptions({maxInstances: 10});
 
 const appSecret = defineSecret("APP_SECRET");
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const youtubeApiKey = defineSecret("YOUTUBE_API_KEY");
 
 /**
  * YouTube字幕をInnerTube API経由で取得
@@ -63,6 +64,67 @@ async function fetchYouTubeTranscript(videoId: string): Promise<string> {
 }
 
 /**
+ * YouTube Data API v3 プロキシ
+ * クライアントにAPIキーを持たせず、サーバー経由でYouTube APIを叩く
+ */
+export const getVideoInfo = onRequest(
+  {
+    region: "asia-northeast1",
+    secrets: [appSecret, youtubeApiKey],
+    cors: true,
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).json({error: "Method not allowed"});
+      return;
+    }
+
+    const {videoId, secret} = req.body;
+
+    if (secret !== appSecret.value()) {
+      res.status(401).json({error: "Unauthorized"});
+      return;
+    }
+
+    if (!videoId || typeof videoId !== "string" ||
+        !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+      res.status(400).json({error: "Invalid videoId"});
+      return;
+    }
+
+    const apiKey = youtubeApiKey.value();
+    const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`;
+
+    try {
+      const apiRes = await fetch(apiUrl);
+      if (!apiRes.ok) {
+        res.status(apiRes.status).json({
+          error: `YouTube API error: ${apiRes.status}`,
+        });
+        return;
+      }
+      const data = await apiRes.json();
+      if (!data.items || data.items.length === 0) {
+        res.status(404).json({error: "Video not found"});
+        return;
+      }
+      const snippet = data.items[0].snippet;
+      res.json({
+        videoId,
+        title: snippet.title,
+        description: snippet.description,
+        thumbnailUrl:
+          snippet.thumbnails?.high?.url ||
+          snippet.thumbnails?.default?.url || "",
+        channelTitle: snippet.channelTitle,
+      });
+    } catch (e) {
+      res.status(500).json({error: String(e)});
+    }
+  }
+);
+
+/**
  * レシピ手順をVertex AI Geminiで生成するHTTP Function
  */
 export const getRecipeSteps = onRequest(
@@ -112,20 +174,21 @@ export const getRecipeSteps = onRequest(
 材料と調理手順をJSONで返してください。
 
 要件:
-- 材料: 動画で使われる食材・調味料をすべて抽出
-- 手順: 調理の具体的な手順（挨拶・自己紹介・チャンネル登録は除外）
+- 材料: 動画で使われる食材・調味料をすべて抽出（分量も可能な限り含める）
+- 手順: 調理の具体的な手順を最初から最後まですべて抽出（挨拶・自己紹介・チャンネル登録は除外）
+- 手順は省略せず、調理開始から盛り付け・完成まで漏れなく含めること
 - 日本語・体言止め
-- 3〜15ステップ
+- ステップ数に上限なし（実際の調理工程に忠実に）
 - JSONのみ返す
 
 出力フォーマット:
 {"steps":[{"number":1,"text":"手順"}],"ingredients":[{"name":"食材名","amount":"量"}]}
 
 字幕:
-${transcriptText.slice(0, 3500)}${commentText ? `
+${transcriptText.slice(0, 10000)}${commentText ? `
 
 コメント欄の情報も参考に（材料・分量参照）:
-${commentText.slice(0, 1500)}` : ""}`;
+${commentText.slice(0, 3000)}` : ""}`;
 
     try {
       // @google/genai でAPIキーを使ってGemini Developer APIを呼ぶ

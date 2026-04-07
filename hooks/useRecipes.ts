@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   getRecipes,
   getRecipe,
@@ -21,20 +21,26 @@ export function useRecipes() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [monthlyCount, setMonthlyCount] = useState(0);
+  const initializingRef = useRef(false);
 
   const loadRecipes = useCallback(async () => {
     setLoading(true);
     try {
-      // 初回起動時にプリセットレシピを保存
+      // 初回起動時にプリセットレシピを保存（二重実行防止）
       const initialized = await isInitialized();
-      if (!initialized) {
-        const existing = await getRecipes();
-        if (existing.length === 0) {
-          for (const preset of presetRecipes) {
-            await saveRecipe(preset);
+      if (!initialized && !initializingRef.current) {
+        initializingRef.current = true;
+        try {
+          const existing = await getRecipes();
+          if (existing.length === 0) {
+            for (const preset of presetRecipes) {
+              await saveRecipe(preset);
+            }
           }
+          await setInitialized();
+        } finally {
+          initializingRef.current = false;
         }
-        await setInitialized();
       }
 
       const data = await getRecipes();
@@ -43,7 +49,6 @@ export function useRecipes() {
       setMonthlyCount(count);
     } catch (e) {
       console.error('[useRecipes] loadRecipes failed:', e);
-      // レシピ読み込み失敗時は空配列で続行（クラッシュさせない）
       setRecipes([]);
     } finally {
       setLoading(false);

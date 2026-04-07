@@ -229,6 +229,7 @@ export function usePurchase() {
       let changed = false;
 
       for (const p of availablePurchases) {
+        if (!p?.productId) continue;
         const pid = p.productId as ProductId;
         if (PRODUCT_IDS.includes(pid) && !newPurchases[pid]) {
           if (pid === PRODUCTS.PRO_BUNDLE) {

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Sentry from '@sentry/react-native';
 import type { Ingredient, RecipeStep } from './parser';
 import type { Platform } from './platform';
 
@@ -25,6 +26,60 @@ const RECIPES_KEY = 'mirurecipe_recipes';
 const MONTHLY_COUNT_KEY = 'mirurecipe_monthly_count';
 const PURCHASES_KEY = 'mirurecipe_purchases';
 const SHOPPING_LIST_KEY = 'mirurecipe_shopping_list';
+const SCHEMA_VERSION_KEY = 'mirurecipe_schema_version';
+const CURRENT_SCHEMA_VERSION = 1;
+
+/**
+ * スキーママイグレーション
+ * アプリ更新でRecipe型が変わった場合にデータを安全に変換する
+ */
+export async function runMigrations(): Promise<void> {
+  try {
+    const stored = await AsyncStorage.getItem(SCHEMA_VERSION_KEY);
+    const version = stored ? parseInt(stored, 10) : 0;
+
+    if (version >= CURRENT_SCHEMA_VERSION) return;
+
+    // v0 → v1: 既存レシピにデフォルトフィールドを補完
+    if (version < 1) {
+      const json = await AsyncStorage.getItem(RECIPES_KEY);
+      if (json) {
+        try {
+          const recipes = JSON.parse(json);
+          if (Array.isArray(recipes)) {
+            const migrated = recipes.map((r: any) => ({
+              id: r.id ?? '',
+              videoId: r.videoId ?? '',
+              title: r.title ?? '',
+              description: r.description ?? '',
+              thumbnailUrl: r.thumbnailUrl ?? '',
+              channelTitle: r.channelTitle ?? '',
+              ingredients: Array.isArray(r.ingredients) ? r.ingredients : [],
+              steps: Array.isArray(r.steps) ? r.steps : [],
+              servings: r.servings ?? '',
+              category: r.category ?? 'breakfast',
+              isFavorite: r.isFavorite ?? false,
+              createdAt: r.createdAt ?? new Date().toISOString(),
+              platform: r.platform,
+              sourceUrl: r.sourceUrl,
+              cookTime: r.cookTime,
+              captionsAvailable: r.captionsAvailable,
+            }));
+            await AsyncStorage.setItem(RECIPES_KEY, JSON.stringify(migrated));
+          }
+        } catch {
+          Sentry.captureMessage('v1 migration failed', { level: 'warning' });
+        }
+      }
+    }
+
+    // 将来のマイグレーション: if (version < 2) { ... }
+
+    await AsyncStorage.setItem(SCHEMA_VERSION_KEY, CURRENT_SCHEMA_VERSION.toString());
+  } catch (e) {
+    Sentry.captureException(e);
+  }
+}
 
 /**
  * 全レシピを取得
@@ -32,8 +87,16 @@ const SHOPPING_LIST_KEY = 'mirurecipe_shopping_list';
 export async function getRecipes(): Promise<Recipe[]> {
   try {
     const json = await AsyncStorage.getItem(RECIPES_KEY);
-    return json ? JSON.parse(json) : [];
-  } catch {
+    if (!json) return [];
+    try {
+      const parsed = JSON.parse(json);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      Sentry.captureMessage('レシピデータのパースに失敗', { level: 'error' });
+      return [];
+    }
+  } catch (e) {
+    Sentry.captureException(e);
     return [];
   }
 }
@@ -120,8 +183,16 @@ export async function savePurchase(productId: string): Promise<void> {
 export async function getPurchases(): Promise<string[]> {
   try {
     const json = await AsyncStorage.getItem(PURCHASES_KEY);
-    return json ? JSON.parse(json) : [];
-  } catch {
+    if (!json) return [];
+    try {
+      const parsed = JSON.parse(json);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      Sentry.captureMessage('購入データのパースに失敗', { level: 'error' });
+      return [];
+    }
+  } catch (e) {
+    Sentry.captureException(e);
     return [];
   }
 }
@@ -151,8 +222,16 @@ export interface ShoppingItem {
 export async function getShoppingList(): Promise<ShoppingItem[]> {
   try {
     const json = await AsyncStorage.getItem(SHOPPING_LIST_KEY);
-    return json ? JSON.parse(json) : [];
-  } catch {
+    if (!json) return [];
+    try {
+      const parsed = JSON.parse(json);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      Sentry.captureMessage('買い物リストのパースに失敗', { level: 'error' });
+      return [];
+    }
+  } catch (e) {
+    Sentry.captureException(e);
     return [];
   }
 }
@@ -203,6 +282,7 @@ export async function reorderRecipes(ids: string[]): Promise<void> {
  * レシピの材料を買い物リストに追加
  */
 export async function addToShoppingList(recipe: Recipe): Promise<void> {
+  if (!recipe.ingredients || recipe.ingredients.length === 0) return;
   const list = await getShoppingList();
   const newItems: ShoppingItem[] = recipe.ingredients.map((ing, i) => ({
     id: `${recipe.id}_${i}`,

@@ -29,13 +29,19 @@ export default function CookingModeScreen() {
   // 読み上げ: ステップ変更時
   useEffect(() => {
     if (!speechEnabled || !recipe || recipe.steps.length === 0) return;
+    if (currentStep < 0 || currentStep >= recipe.steps.length) return;
     const step = recipe.steps[currentStep];
+    if (!step?.text) return;
+    // 前の読み上げを確実に停止してから開始
     Speech.stop();
-    try {
-      Speech.speak(step.text, { language: 'ja-JP' });
-    } catch (e) {
-      if (__DEV__) console.warn('Speech.speak failed:', e);
-    }
+    const timer = setTimeout(() => {
+      try {
+        Speech.speak(step.text, { language: 'ja-JP' });
+      } catch (e) {
+        if (__DEV__) console.warn('Speech.speak failed:', e);
+      }
+    }, 100);
+    return () => clearTimeout(timer);
   }, [currentStep, speechEnabled, recipe]);
 
   // クリーンアップ
@@ -47,26 +53,22 @@ export default function CookingModeScreen() {
 
   const toggleSpeech = useCallback(() => {
     if (!speechEnabled) {
+      // useEffectが読み上げを担当するので、ここではフラグだけ立てる
       setSpeechEnabled(true);
-      // 即座に現在のステップを読み上げ
-      if (recipe && recipe.steps.length > 0) {
-        try {
-          Speech.speak(recipe.steps[currentStep].text, { language: 'ja-JP' });
-        } catch (e) {
-          if (__DEV__) console.warn('Speech.speak failed:', e);
-        }
-      }
     } else {
       setSpeechEnabled(false);
       Speech.stop();
     }
-  }, [speechEnabled, recipe, currentStep]);
+  }, [speechEnabled]);
 
   const reSpeak = useCallback(() => {
     if (!recipe || recipe.steps.length === 0) return;
+    const idx = Math.max(0, Math.min(currentStep, recipe.steps.length - 1));
+    const text = recipe.steps[idx]?.text;
+    if (!text) return;
     Speech.stop();
     try {
-      Speech.speak(recipe.steps[currentStep].text, { language: 'ja-JP' });
+      Speech.speak(text, { language: 'ja-JP' });
     } catch (e) {
       if (__DEV__) console.warn('Speech.speak failed:', e);
     }
@@ -88,9 +90,14 @@ export default function CookingModeScreen() {
     );
   }
 
-  const step = recipe.steps[currentStep];
-  const isFirst = currentStep === 0;
-  const isLast = currentStep === recipe.steps.length - 1;
+  // currentStepの境界チェック
+  const safeStep = Math.max(0, Math.min(currentStep, recipe.steps.length - 1));
+  if (safeStep !== currentStep) {
+    setCurrentStep(safeStep);
+  }
+  const step = recipe.steps[safeStep];
+  const isFirst = safeStep === 0;
+  const isLast = safeStep === recipe.steps.length - 1;
 
   // テキストから「X分」「X秒」を検出してタイマー秒数を算出
   const detectedTimerSeconds = (() => {
@@ -161,7 +168,7 @@ export default function CookingModeScreen() {
 
         {detectedTimerSeconds != null && (
           <View style={styles.timerContainer}>
-            <TimerButton seconds={detectedTimerSeconds} />
+            <TimerButton key={`timer-${safeStep}-${detectedTimerSeconds}`} seconds={detectedTimerSeconds} />
           </View>
         )}
 

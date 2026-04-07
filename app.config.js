@@ -5,7 +5,7 @@ module.exports = {
   expo: {
     name: "ミルレシピ",
     slug: "miru-recipe",
-    version: "1.0.3",
+    version: "1.0.4",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -18,7 +18,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.mirurecipe.app",
-      buildNumber: "10",
+      buildNumber: "11",
       privacyPolicyUrl: "https://github.com/nikkiai0024/miru-recipe/blob/main/PRIVACY.md",
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
@@ -41,6 +41,7 @@ module.exports = {
       // 環境変数から読み込む（.envまたはEAS Secrets）
       youtubeApiKey: process.env.YOUTUBE_API_KEY || "",
       appSecret: process.env.APP_SECRET || "",
+      sentryDsn: process.env.SENTRY_DSN || "",
       eas: {
         projectId: "eea450bd-aaf6-4ccb-801b-882b9a185429",
       },
@@ -50,6 +51,7 @@ module.exports = {
       "expo-sharing",
       "expo-font",
       "expo-iap",
+      "@sentry/react-native/expo",
       [
         "react-native-google-mobile-ads",
         {

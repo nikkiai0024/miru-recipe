@@ -243,7 +243,7 @@ export default function AddScreen() {
     }
 
     const recipe: Recipe = {
-      id: Date.now().toString(),
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       videoId,
       title,
       description,

@@ -1,4 +1,5 @@
 import { fetchYouTubeTranscript as fetchTranscript } from "./transcript";
+import * as Sentry from '@sentry/react-native';
 
 export interface AIStep {
   number: number;
@@ -45,24 +46,35 @@ export async function fetchStepsFromTranscript(videoId: string, transcriptText?:
 
     // 2. 字幕テキストをFirebase Functionsに送ってGemini AIで手順・材料生成
     if (__DEV__) console.log("[AI] Sending to Firebase Function...");
-    const body: Record<string, string> = { transcriptText: transcriptText.slice(0, 3500), secret: APP_SECRET };
+    const body: Record<string, string> = { transcriptText: transcriptText.slice(0, 10000), secret: APP_SECRET };
     if (commentText) {
       body.commentText = commentText;
     }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     const response = await fetch(FUNCTION_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
     if (__DEV__) console.log("[AI] Function status:", response.status);
     const text = await response.text();
     if (__DEV__) console.log("[AI] Function response:", text.slice(0, 200));
     if (!text) throw new Error("Empty response");
-    const json = JSON.parse(text);
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      if (__DEV__) console.error("Invalid JSON from Firebase:", text.slice(0, 200));
+      return { steps: [], ingredients: [] };
+    }
     if (json.error) throw new Error(json.error);
     return { steps: json.steps ?? [], ingredients: json.ingredients ?? [] };
   } catch (e) {
     if (__DEV__) console.error("fetchStepsFromTranscript error:", e);
+    Sentry.captureException(e);
     return { steps: [], ingredients: [] };
   }
 }

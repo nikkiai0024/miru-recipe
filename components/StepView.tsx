@@ -26,13 +26,13 @@ export function StepView({ step, isActive, large, onTimestampPress }: Props) {
       </View>
       <View style={styles.content}>
         <Text style={[styles.text, large && styles.largeText]}>
-          {step.text}
+          {step.text || '（手順テキストなし）'}
         </Text>
         <View style={styles.actions}>
           {step.timestamp != null && onTimestampPress && (
             <Text
               style={styles.timestamp}
-              onPress={() => onTimestampPress(step.timestamp!)}
+              onPress={() => onTimestampPress(step.timestamp ?? 0)}
             >
               {formatTimestamp(step.timestamp)}
             </Text>

@@ -10,6 +10,12 @@ export function TimerButton({ seconds }: Props) {
   const [running, setRunning] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // seconds propが変わったらタイマーをリセット
+  useEffect(() => {
+    setRemaining(seconds);
+    setRunning(false);
+  }, [seconds]);
+
   // remainingを依存配列から除外: setRemainingの関数形式で十分なため
   // remaining毎に再生成するとintervalがリークする
   useEffect(() => {

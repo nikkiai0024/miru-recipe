@@ -8,6 +8,9 @@ export interface VideoInfo {
   channelTitle: string;
 }
 
+const PROXY_URL = 'https://asia-northeast1-miru-recipe-backend-cac53.cloudfunctions.net/getVideoInfo';
+const APP_SECRET = Constants.expoConfig?.extra?.appSecret ?? '';
+
 /**
  * YouTube URLからvideoIdを抽出
  */
@@ -27,46 +30,38 @@ export function extractVideoId(url: string): string | null {
 }
 
 /**
- * YouTube Data API v3で動画情報を取得
+ * バックエンドプロキシ経由でYouTube動画情報を取得
+ * APIキーはサーバー側で管理し、クライアントには持たせない
  */
 export async function fetchVideoInfo(videoId: string): Promise<VideoInfo> {
-  const apiKey = Constants.expoConfig?.extra?.youtubeApiKey;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId, secret: APP_SECRET }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
 
-  if (!apiKey) {
-    return fetchViaOEmbed(videoId);
-  }
-
-  const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`;
-
-  // iOSのAPIキー制限はX-Ios-Bundle-Identifierヘッダーで照合される
-  // fetch()はこのヘッダーを自動付与しないため明示的に指定が必要
-  const bundleId = Constants.expoConfig?.ios?.bundleIdentifier ?? 'com.mirurecipe.app';
-  const response = await fetch(url, {
-    headers: {
-      'X-Ios-Bundle-Identifier': bundleId,
-    },
-  });
-  if (!response.ok) {
-    // 403/401/429はAPI Key問題やレート制限 → oEmbedにフォールバック
-    if (response.status === 403 || response.status === 401 || response.status === 429) {
+    if (!response.ok) {
+      // プロキシ失敗時はoEmbedにフォールバック
       return fetchViaOEmbed(videoId);
     }
-    throw new Error(`YouTube API error: ${response.status}`);
-  }
 
-  const data = await response.json();
-  if (!data.items || data.items.length === 0) {
-    throw new Error('動画が見つかりませんでした');
+    const data = await response.json();
+    return {
+      videoId: data.videoId,
+      title: data.title ?? '',
+      description: data.description ?? '',
+      thumbnailUrl: data.thumbnailUrl ?? '',
+      channelTitle: data.channelTitle ?? '',
+    };
+  } catch {
+    // ネットワークエラー・タイムアウト時はoEmbedにフォールバック
+    return fetchViaOEmbed(videoId);
   }
-
-  const snippet = data.items[0].snippet;
-  return {
-    videoId,
-    title: snippet.title,
-    description: snippet.description,
-    thumbnailUrl: snippet.thumbnails?.high?.url || snippet.thumbnails?.default?.url || '',
-    channelTitle: snippet.channelTitle,
-  };
 }
 
 /**

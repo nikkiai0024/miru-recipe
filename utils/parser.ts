@@ -152,7 +152,7 @@ function parseIngredientsFromDescription(text: string): Ingredient[] {
 function parseIngredientLine(line: string): Ingredient | null {
   // Strip bullet prefix
   const cleaned = line.replace(BULLET_PREFIX, '').trim();
-  if (!cleaned || cleaned.length > 80) return null;
+  if (!cleaned || cleaned.length > 120) return null;
 
   // Pattern: "name  amount" (2+ spaces or full-width space)
   const splitMatch =
@@ -209,8 +209,10 @@ function parseStepsFromDescription(text: string): RecipeStep[] {
       continue;
     }
 
-    // End on another section header
+    // End on another section header (ただし手順関連のセクションは除外)
     if (inSection && /【|■|▼|━{3,}|={3,}/.test(trimmed) && !STEP_SECTION_HEADERS.test(trimmed)) {
+      // 手順の途中にある装飾的な区切り線はスキップして続行
+      if (/^[━═─]{3,}$/.test(trimmed)) continue;
       inSection = false;
       continue;
     }
@@ -540,7 +542,7 @@ function cleanStepText(text: string): string {
 }
 
 /**
- * Merge steps shorter than 15 chars into the previous step.
+ * Merge steps shorter than 10 chars into the previous step.
  */
 function mergeShortSteps(steps: RecipeStep[]): RecipeStep[] {
   if (steps.length <= 1) return steps;
@@ -549,7 +551,7 @@ function mergeShortSteps(steps: RecipeStep[]): RecipeStep[] {
 
   for (let i = 1; i < steps.length; i++) {
     const prev = merged[merged.length - 1];
-    if (steps[i].text.length < 15 && !TRANSITION_WORDS.test(steps[i].text)) {
+    if (steps[i].text.length < 10 && !TRANSITION_WORDS.test(steps[i].text)) {
       // Merge into previous
       prev.text += ' ' + steps[i].text;
       prev.timerSeconds = prev.timerSeconds ?? detectTimer(steps[i].text);

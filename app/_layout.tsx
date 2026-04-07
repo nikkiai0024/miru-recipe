@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { useFonts } from 'expo-font';
 import {
@@ -7,12 +7,29 @@ import {
 } from '@expo-google-fonts/biz-udgothic';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as Sentry from '@sentry/react-native';
+import Constants from 'expo-constants';
+import { runMigrations } from '../utils/storage';
+
+const sentryDsn = Constants.expoConfig?.extra?.sentryDsn;
+if (sentryDsn) {
+  Sentry.init({
+    dsn: sentryDsn,
+    tracesSampleRate: 0.2,
+    enableAutoSessionTracking: true,
+  });
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     BIZUDGothic_400Regular,
     BIZUDGothic_700Bold,
   });
+
+  // アプリ起動時にスキーママイグレーションを実行
+  useEffect(() => {
+    runMigrations();
+  }, []);
 
   if (!fontsLoaded) {
     return (
