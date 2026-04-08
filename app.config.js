@@ -51,7 +51,13 @@ module.exports = {
       "expo-sharing",
       "expo-font",
       "expo-iap",
-      "@sentry/react-native/expo",
+      [
+        "@sentry/react-native/expo",
+        {
+          organization: "takahiro-onishi",
+          project: "react-native",
+        },
+      ],
       [
         "react-native-google-mobile-ads",
         {
