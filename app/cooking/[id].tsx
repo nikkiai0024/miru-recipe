@@ -44,6 +44,16 @@ export default function CookingModeScreen() {
     return () => clearTimeout(timer);
   }, [currentStep, speechEnabled, recipe]);
 
+  // recipe変更時にcurrentStepを範囲内にクランプ（render中setState回避）
+  useEffect(() => {
+    if (!recipe || recipe.steps.length === 0) return;
+    if (currentStep >= recipe.steps.length) {
+      setCurrentStep(recipe.steps.length - 1);
+    } else if (currentStep < 0) {
+      setCurrentStep(0);
+    }
+  }, [recipe, currentStep]);
+
   // クリーンアップ
   useEffect(() => {
     return () => {
@@ -90,11 +100,8 @@ export default function CookingModeScreen() {
     );
   }
 
-  // currentStepの境界チェック
+  // currentStepの境界チェック（実setStateはuseEffectで実施）
   const safeStep = Math.max(0, Math.min(currentStep, recipe.steps.length - 1));
-  if (safeStep !== currentStep) {
-    setCurrentStep(safeStep);
-  }
   const step = recipe.steps[safeStep];
   const isFirst = safeStep === 0;
   const isLast = safeStep === recipe.steps.length - 1;

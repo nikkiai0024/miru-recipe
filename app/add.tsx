@@ -324,6 +324,15 @@ export default function AddScreen() {
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
+        <Stack.Screen
+          options={{
+            headerLeft: () => (
+              <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4 }}>
+                <Text style={{ fontSize: 17, color: '#fff' }}>✕</Text>
+              </TouchableOpacity>
+            ),
+          }}
+        />
         <View style={styles.urlContainer}>
           <Text style={styles.heading}>レシピURLを入力</Text>
           <Text style={styles.subtitle}>

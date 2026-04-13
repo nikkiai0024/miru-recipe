@@ -181,35 +181,36 @@ export default function ShoppingScreen() {
                   </TouchableOpacity>
                 </View>
                 {recipeItems.map((item) => (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={styles.item}
-                    onPress={() => toggleItem(item.id)}
-                  >
-                    <View
-                      style={[
-                        styles.checkbox,
-                        item.checked && styles.checkboxChecked,
-                      ]}
+                  <View key={item.id} style={styles.item}>
+                    <TouchableOpacity
+                      style={styles.itemMain}
+                      onPress={() => toggleItem(item.id)}
                     >
-                      {item.checked && <Text style={styles.checkmark}>✓</Text>}
-                    </View>
-                    <Text
-                      style={[
-                        styles.itemName,
-                        item.checked && styles.itemNameChecked,
-                      ]}
-                    >
-                      {item.name}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.itemAmount,
-                        item.checked && styles.itemAmountChecked,
-                      ]}
-                    >
-                      {item.amount}
-                    </Text>
+                      <View
+                        style={[
+                          styles.checkbox,
+                          item.checked && styles.checkboxChecked,
+                        ]}
+                      >
+                        {item.checked && <Text style={styles.checkmark}>✓</Text>}
+                      </View>
+                      <Text
+                        style={[
+                          styles.itemName,
+                          item.checked && styles.itemNameChecked,
+                        ]}
+                      >
+                        {item.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.itemAmount,
+                          item.checked && styles.itemAmountChecked,
+                        ]}
+                      >
+                        {item.amount}
+                      </Text>
+                    </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => removeItem(item.id)}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -217,7 +218,7 @@ export default function ShoppingScreen() {
                     >
                       <Text style={styles.itemDeleteText}>✕</Text>
                     </TouchableOpacity>
-                  </TouchableOpacity>
+                  </View>
                 ))}
               </View>
             )}
@@ -306,9 +307,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
     borderRadius: 8,
     marginBottom: 4,
+  },
+  itemMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
     gap: 12,
   },
   checkbox: {

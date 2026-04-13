@@ -7,9 +7,11 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Stack, useRouter } from 'expo-router';
 import { usePurchase, PRODUCT_INFO, type ProductId } from '../hooks/usePurchase';
 
 export default function ProScreen() {
+  const router = useRouter();
   const { purchases, purchase, restorePurchases, hasUnlimited, hasCookingPro, hasShoppingList } =
     usePurchase();
 
@@ -18,6 +20,15 @@ export default function ProScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom","left","right"]}>
+    <Stack.Screen
+      options={{
+        headerLeft: () => (
+          <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4 }}>
+            <Text style={{ fontSize: 17, color: '#fff' }}>✕</Text>
+          </TouchableOpacity>
+        ),
+      }}
+    />
     <ScrollView
       style={{ flex: 1 }}
       contentContainerStyle={styles.content}

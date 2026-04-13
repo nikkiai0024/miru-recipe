@@ -137,11 +137,10 @@ export async function deleteRecipe(id: string): Promise<void> {
  */
 export async function toggleFavorite(id: string): Promise<void> {
   const recipes = await getRecipes();
-  const recipe = recipes.find((r) => r.id === id);
-  if (recipe) {
-    recipe.isFavorite = !recipe.isFavorite;
-    await AsyncStorage.setItem(RECIPES_KEY, JSON.stringify(recipes));
-  }
+  const updated = recipes.map((r) =>
+    r.id === id ? { ...r, isFavorite: !r.isFavorite } : r
+  );
+  await AsyncStorage.setItem(RECIPES_KEY, JSON.stringify(updated));
 }
 
 /**
@@ -172,8 +171,10 @@ export async function incrementMonthlyCount(): Promise<number> {
 export async function savePurchase(productId: string): Promise<void> {
   const purchases = await getPurchases();
   if (!purchases.includes(productId)) {
-    purchases.push(productId);
-    await AsyncStorage.setItem(PURCHASES_KEY, JSON.stringify(purchases));
+    await AsyncStorage.setItem(
+      PURCHASES_KEY,
+      JSON.stringify([...purchases, productId])
+    );
   }
 }
 
@@ -272,7 +273,9 @@ export async function setInitialized(): Promise<void> {
 export async function reorderRecipes(ids: string[]): Promise<void> {
   const recipes = await getRecipes();
   const map = new Map(recipes.map((r) => [r.id, r]));
-  const reordered = ids.map((id) => map.get(id)!).filter(Boolean);
+  const reordered = ids
+    .map((id) => map.get(id))
+    .filter((r): r is Recipe => r !== undefined);
   // ids に含まれないレシピがあれば末尾に追加
   const remaining = recipes.filter((r) => !ids.includes(r.id));
   await AsyncStorage.setItem(RECIPES_KEY, JSON.stringify([...reordered, ...remaining]));

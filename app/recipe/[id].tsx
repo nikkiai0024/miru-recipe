@@ -95,8 +95,14 @@ export default function RecipeDetailScreen() {
         <View style={styles.playerContainer}>
           <YouTubePlayer videoId={recipe.videoId} ref={playerRef} />
         </View>
-      ) : (
+      ) : recipe.thumbnailUrl ? (
         <Image source={{ uri: recipe.thumbnailUrl }} style={styles.thumbnail} />
+      ) : (
+        <View style={styles.thumbnailPlaceholder}>
+          <Text style={styles.thumbnailPlaceholderEmoji}>
+            {getCategoryEmoji(recipe.category)}
+          </Text>
+        </View>
       )}
 
       {/* タイトル */}
@@ -194,6 +200,18 @@ const styles = StyleSheet.create({
   thumbnail: {
     width: '100%',
     height: 220,
+  },
+  thumbnailPlaceholder: {
+    width: '100%',
+    height: 180,
+    backgroundColor: '#FFF0E6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderBottomWidth: 4,
+    borderBottomColor: '#FF6B35',
+  },
+  thumbnailPlaceholderEmoji: {
+    fontSize: 80,
   },
   titleSection: {
     padding: 16,

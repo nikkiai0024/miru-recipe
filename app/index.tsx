@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
+  Vibration,
 } from 'react-native';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -134,10 +135,13 @@ export default function HomeScreen() {
         <DraggableFlatList
           data={pendingOrder}
           keyExtractor={(item) => item.id}
+          activationDistance={0}
+          autoscrollThreshold={60}
+          autoscrollSpeed={150}
           onDragEnd={({ data }) => setPendingOrder(data)}
           renderItem={({ item, drag, isActive }: RenderItemParams<typeof recipes[0]>) => (
             <ScaleDecorator>
-              <View style={[styles.reorderRow, isActive && { opacity: 0.85 }]}>
+              <View style={[styles.reorderRow, isActive && styles.reorderRowActive]}>
                 <View style={{ flex: 1 }}>
                   <RecipeCard
                     recipe={item}
@@ -145,8 +149,18 @@ export default function HomeScreen() {
                     onFavorite={() => {}}
                   />
                 </View>
-                <TouchableOpacity onLongPress={drag} style={styles.dragHandle}>
-                  <Text style={styles.dragHandleText}>≡</Text>
+                <TouchableOpacity
+                  onPressIn={() => {
+                    Vibration.vibrate(10);
+                    drag();
+                  }}
+                  disabled={isActive}
+                  style={[styles.dragHandle, isActive && styles.dragHandleActive]}
+                  activeOpacity={0.6}
+                >
+                  <Text style={[styles.dragHandleText, isActive && styles.dragHandleTextActive]}>
+                    ≡
+                  </Text>
                 </TouchableOpacity>
               </View>
             </ScaleDecorator>
@@ -425,14 +439,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingRight: 8,
   },
+  reorderRowActive: {
+    opacity: 0.9,
+    shadowColor: '#FF6B35',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
+  },
   dragHandle: {
-    padding: 16,
+    paddingVertical: 20,
+    paddingHorizontal: 18,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 12,
+    marginLeft: 4,
+  },
+  dragHandleActive: {
+    backgroundColor: '#FFF0E6',
   },
   dragHandleText: {
-    fontSize: 24,
-    color: '#ccc',
+    fontSize: 28,
+    color: '#bbb',
+    fontWeight: '700',
+  },
+  dragHandleTextActive: {
+    color: '#FF6B35',
   },
   reorderButtons: {
     justifyContent: 'center',
