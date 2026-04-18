@@ -6,6 +6,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -14,6 +16,10 @@ import * as Speech from 'expo-speech';
 import { useRecipe } from '../../hooks/useRecipes';
 import { usePurchase } from '../../hooks/usePurchase';
 import { TimerButton } from '../../components/TimerButton';
+
+// iPhone SE (375px) で前/次ボタン両端固定 + 中央flex:1 の構造だと、
+// 中央領域は約 100px。dot(8px) × N + active(22px) + gap(6px) × (N-1) が収まるのは N=6 まで。
+const SHOW_DOTS_THRESHOLD = 6;
 
 export default function CookingModeScreen() {
   useKeepAwake();
@@ -25,6 +31,7 @@ export default function CookingModeScreen() {
   const { hasCookingPro } = usePurchase();
   const [currentStep, setCurrentStep] = useState(0);
   const [speechEnabled, setSpeechEnabled] = useState(false);
+  const [proNudgeVisible, setProNudgeVisible] = useState(false);
 
   // 読み上げ: ステップ変更時
   useEffect(() => {
@@ -32,7 +39,6 @@ export default function CookingModeScreen() {
     if (currentStep < 0 || currentStep >= recipe.steps.length) return;
     const step = recipe.steps[currentStep];
     if (!step?.text) return;
-    // 前の読み上げを確実に停止してから開始
     Speech.stop();
     const timer = setTimeout(() => {
       try {
@@ -44,7 +50,7 @@ export default function CookingModeScreen() {
     return () => clearTimeout(timer);
   }, [currentStep, speechEnabled, recipe]);
 
-  // recipe変更時にcurrentStepを範囲内にクランプ（render中setState回避）
+  // recipe変更時にcurrentStepを範囲内にクランプ
   useEffect(() => {
     if (!recipe || recipe.steps.length === 0) return;
     if (currentStep >= recipe.steps.length) {
@@ -54,7 +60,6 @@ export default function CookingModeScreen() {
     }
   }, [recipe, currentStep]);
 
-  // クリーンアップ
   useEffect(() => {
     return () => {
       Speech.stop();
@@ -62,14 +67,17 @@ export default function CookingModeScreen() {
   }, []);
 
   const toggleSpeech = useCallback(() => {
+    if (!hasCookingPro) {
+      setProNudgeVisible(true);
+      return;
+    }
     if (!speechEnabled) {
-      // useEffectが読み上げを担当するので、ここではフラグだけ立てる
       setSpeechEnabled(true);
     } else {
       setSpeechEnabled(false);
       Speech.stop();
     }
-  }, [speechEnabled]);
+  }, [speechEnabled, hasCookingPro]);
 
   const reSpeak = useCallback(() => {
     if (!recipe || recipe.steps.length === 0) return;
@@ -100,13 +108,14 @@ export default function CookingModeScreen() {
     );
   }
 
-  // currentStepの境界チェック（実setStateはuseEffectで実施）
   const safeStep = Math.max(0, Math.min(currentStep, recipe.steps.length - 1));
   const step = recipe.steps[safeStep];
+  const totalSteps = recipe.steps.length;
   const isFirst = safeStep === 0;
-  const isLast = safeStep === recipe.steps.length - 1;
+  const isLast = safeStep === totalSteps - 1;
+  const progressPct = ((safeStep + 1) / totalSteps) * 100;
+  const shouldShowDots = totalSteps <= SHOW_DOTS_THRESHOLD;
 
-  // テキストから「X分」「X秒」を検出してタイマー秒数を算出
   const detectedTimerSeconds = (() => {
     if (step.timerSeconds != null) return step.timerSeconds;
     const text = step?.text ?? '';
@@ -139,45 +148,62 @@ export default function CookingModeScreen() {
     <View style={styles.container}>
       {/* ヘッダー */}
       <View style={styles.header}>
-        <Text style={styles.recipeTitle} numberOfLines={1}>
-          {recipe.title}
-        </Text>
-        {hasCookingPro && (
-          <TouchableOpacity onPress={toggleSpeech} style={[styles.speechPill, speechEnabled && styles.speechPillActive]}>
-            <Text style={[styles.speechPillText, speechEnabled && styles.speechPillTextActive]}>
-              {speechEnabled ? '🔊 読み上げON' : '🔇 読み上げOFF'}
+        <View style={styles.headerTop}>
+          <Text style={styles.recipeTitle} numberOfLines={1}>
+            {recipe.title}
+          </Text>
+          <TouchableOpacity
+            onPress={toggleSpeech}
+            style={[
+              styles.speechPill,
+              speechEnabled && styles.speechPillActive,
+              !hasCookingPro && styles.speechPillLocked,
+            ]}
+          >
+            <Text style={[
+              styles.speechPillText,
+              speechEnabled && styles.speechPillTextActive,
+            ]}>
+              {!hasCookingPro ? '🔒 読み上げ' : speechEnabled ? '🔊 読み上げ' : '🔇 読み上げ'}
             </Text>
           </TouchableOpacity>
-        )}
-        <Text style={styles.progress}>
-          {currentStep + 1} / {recipe.steps.length}
-        </Text>
-      </View>
+        </View>
 
-      {/* プログレスバー */}
-      <View style={styles.progressBar}>
-        <View
-          style={[
-            styles.progressFill,
-            {
-              width: `${((currentStep + 1) / recipe.steps.length) * 100}%`,
-            },
-          ]}
-        />
+        {/* プログレス */}
+        <View style={styles.progressRow}>
+          <View style={styles.progressNumberBox}>
+            <Text style={styles.progressCurrent}>{safeStep + 1}</Text>
+            <Text style={styles.progressTotal}>/ {totalSteps}</Text>
+          </View>
+          <View style={styles.progressBarOuter}>
+            <View style={[styles.progressBarFill, { width: `${progressPct}%` }]} />
+          </View>
+          <Text style={styles.progressPct}>{Math.round(progressPct)}%</Text>
+        </View>
       </View>
 
       {/* ステップ表示 + タッチゾーンオーバーレイ */}
       <View style={styles.stepWrapper}>
-        <ScrollView style={styles.stepContainer} contentContainerStyle={styles.stepContent}>
-          <Text style={styles.stepNumber}>ステップ {step.number}</Text>
-          <Text style={styles.stepText}>{step.text}</Text>
-        </ScrollView>
-
-        {detectedTimerSeconds != null && (
-          <View style={styles.timerContainer}>
-            <TimerButton key={`timer-${safeStep}-${detectedTimerSeconds}`} seconds={detectedTimerSeconds} />
+        <ScrollView
+          style={styles.stepContainer}
+          contentContainerStyle={styles.stepContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.stepBadge}>
+            <Text style={styles.stepBadgeText}>STEP</Text>
+            <Text style={styles.stepBadgeNumber}>{step.number}</Text>
           </View>
-        )}
+          <Text style={styles.stepText}>{step.text}</Text>
+
+          {detectedTimerSeconds != null && (
+            <View style={styles.timerInline}>
+              <TimerButton
+                key={`timer-${safeStep}-${detectedTimerSeconds}`}
+                seconds={detectedTimerSeconds}
+              />
+            </View>
+          )}
+        </ScrollView>
 
         {/* タッチゾーンオーバーレイ (Pro機能) */}
         {hasCookingPro && (
@@ -200,39 +226,96 @@ export default function CookingModeScreen() {
       {/* ナビゲーションボタン */}
       <View style={[styles.navigation, { paddingBottom: 16 + insets.bottom }]}>
         <TouchableOpacity
-          style={[styles.navButton, isFirst && styles.navButtonDisabled]}
+          style={[styles.navButton, styles.navButtonPrev, isFirst && styles.navButtonDisabled]}
           onPress={goPrev}
           disabled={isFirst}
+          activeOpacity={0.8}
         >
-          <Text style={[styles.navButtonText, isFirst && styles.navButtonTextDisabled]}>
-            ← 前へ
+          <Text style={[styles.navButtonPrevText, isFirst && styles.navButtonTextDisabled]}>
+            ←
+          </Text>
+          <Text style={[styles.navButtonPrevLabel, isFirst && styles.navButtonTextDisabled]}>
+            前へ
           </Text>
         </TouchableOpacity>
 
-        {speechEnabled ? (
-          <TouchableOpacity style={styles.reSpeakButton} onPress={reSpeak}>
-            <Text style={styles.reSpeakButtonText}>↩ 再読み上げ</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.dots}>
-            {recipe.steps.map((_, i) => (
-              <View
-                key={i}
-                style={[styles.dot, i === currentStep && styles.dotActive]}
-              />
-            ))}
-          </View>
-        )}
+        <View style={styles.navCenter} pointerEvents="box-none">
+          {speechEnabled ? (
+            <TouchableOpacity style={styles.reSpeakButton} onPress={reSpeak}>
+              <Text style={styles.reSpeakButtonText}>↻ 再読み</Text>
+            </TouchableOpacity>
+          ) : shouldShowDots ? (
+            <View style={styles.dots}>
+              {recipe.steps.map((_, i) => (
+                <View
+                  key={i}
+                  style={[styles.dot, i === safeStep && styles.dotActive]}
+                />
+              ))}
+            </View>
+          ) : null}
+        </View>
 
         <TouchableOpacity
-          style={[styles.navButton, styles.navButtonNext, isLast && styles.navButtonComplete]}
+          style={[
+            styles.navButton,
+            styles.navButtonNext,
+            isLast && styles.navButtonComplete,
+          ]}
           onPress={goNext}
+          activeOpacity={0.85}
         >
-          <Text style={styles.navButtonNextText}>
-            {isLast ? '完了！' : '次へ →'}
+          <Text style={styles.navButtonNextLabel}>
+            {isLast ? '完了！' : '次へ'}
           </Text>
+          {!isLast && <Text style={styles.navButtonNextIcon}>→</Text>}
         </TouchableOpacity>
       </View>
+
+      {/* Pro機能紹介モーダル (読み上げタップ時) */}
+      <Modal
+        visible={proNudgeVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProNudgeVisible(false)}
+      >
+        <Pressable
+          style={styles.nudgeOverlay}
+          onPress={() => setProNudgeVisible(false)}
+        >
+          <Pressable style={styles.nudgeCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.nudgeEmoji}>👨‍🍳</Text>
+            <Text style={styles.nudgeTitle}>手が汚れててもOK</Text>
+            <Text style={styles.nudgeBody}>
+              調理モードProなら、ステップを自動で読み上げ{'\n'}
+              画面左右タップで前後操作できます。
+            </Text>
+            <View style={styles.nudgeFeatureRow}>
+              <View style={styles.nudgeFeature}>
+                <Text style={styles.nudgeFeatureIcon}>🔊</Text>
+                <Text style={styles.nudgeFeatureText}>音声読み上げ</Text>
+              </View>
+              <View style={styles.nudgeFeature}>
+                <Text style={styles.nudgeFeatureIcon}>👆</Text>
+                <Text style={styles.nudgeFeatureText}>左右タップ操作</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.nudgeCta}
+              onPress={() => {
+                setProNudgeVisible(false);
+                router.push('/pro');
+              }}
+            >
+              <Text style={styles.nudgeCtaText}>¥160 で解放</Text>
+              <Text style={styles.nudgeCtaSub}>買い切り・永久利用</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setProNudgeVisible(false)}>
+              <Text style={styles.nudgeDismiss}>あとで</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -240,66 +323,106 @@ export default function CookingModeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#0F0F14',
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#0F0F14',
   },
   noSteps: {
     color: '#888',
     fontSize: 18,
     fontFamily: 'BIZUDGothic_400Regular',
   },
+  // ヘッダー
   header: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#2A2A32',
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 8,
+    marginBottom: 14,
   },
   recipeTitle: {
     flex: 1,
-    color: '#aaa',
-    fontSize: 14,
-    marginRight: 16,
+    color: '#AAA0A0',
+    fontSize: 13,
+    marginRight: 12,
+    letterSpacing: 0.3,
   },
   speechPill: {
-    marginRight: 12,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#333',
+    borderRadius: 999,
+    backgroundColor: '#1F1F26',
+    borderWidth: 1,
+    borderColor: '#2E2E38',
   },
   speechPillActive: {
     backgroundColor: '#FF6B35',
+    borderColor: '#FF6B35',
+  },
+  speechPillLocked: {
+    backgroundColor: '#1F1F26',
+    borderColor: '#2E2E38',
   },
   speechPillText: {
-    fontSize: 13,
-    color: '#aaa',
+    fontSize: 12,
+    color: '#AAA0A0',
+    fontWeight: '600',
   },
   speechPillTextActive: {
     color: '#fff',
   },
-  progress: {
+  // プログレス
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  progressNumberBox: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  progressCurrent: {
     color: '#FF6B35',
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 28,
+    fontWeight: '800',
+    fontFamily: 'BIZUDGothic_700Bold',
   },
-  progressBar: {
-    height: 3,
-    backgroundColor: '#333',
-    marginHorizontal: 20,
-    borderRadius: 2,
+  progressTotal: {
+    color: '#555560',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 4,
   },
-  progressFill: {
+  progressBarOuter: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#2A2A32',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
     height: '100%',
     backgroundColor: '#FF6B35',
-    borderRadius: 2,
+    borderRadius: 3,
   },
+  progressPct: {
+    color: '#666670',
+    fontSize: 12,
+    fontWeight: '600',
+    width: 36,
+    textAlign: 'right',
+  },
+  // ステップ本文
   stepWrapper: {
     flex: 1,
     position: 'relative',
@@ -308,27 +431,46 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stepContent: {
-    padding: 24,
-    paddingTop: 40,
-    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 24,
     flexGrow: 1,
+    justifyContent: 'center',
   },
-  stepNumber: {
-    color: '#FF6B35',
-    fontSize: 18,
-    fontWeight: '700',
+  stepBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 107, 53, 0.15)',
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 53, 0.3)',
+  },
+  stepBadgeText: {
+    color: '#FF6B35',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+  },
+  stepBadgeNumber: {
+    color: '#FF6B35',
+    fontSize: 14,
+    fontWeight: '800',
+    fontFamily: 'BIZUDGothic_700Bold',
   },
   stepText: {
-    color: '#fff',
+    color: '#F5F5F5',
     fontSize: 28,
     lineHeight: 44,
     fontWeight: '500',
+    fontFamily: 'BIZUDGothic_400Regular',
   },
-  timerContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#1a1a1a',
+  timerInline: {
+    marginTop: 28,
   },
   // タッチゾーン
   touchZoneOverlay: {
@@ -344,66 +486,201 @@ const styles = StyleSheet.create({
   touchZoneRight: {
     flex: 1,
   },
+  // ナビゲーション
   navigation: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#2A2A32',
+    backgroundColor: '#0F0F14',
   },
   navButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderRadius: 12,
-    backgroundColor: '#333',
-    minWidth: 100,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 6,
   },
-  navButtonDisabled: {
-    opacity: 0.3,
+  navButtonPrev: {
+    backgroundColor: '#1F1F26',
+    borderWidth: 1,
+    borderColor: '#2E2E38',
+    minWidth: 92,
   },
-  navButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  navButtonTextDisabled: {
-    color: '#666',
-  },
-  navButtonNext: {
-    backgroundColor: '#FF6B35',
-  },
-  navButtonComplete: {
-    backgroundColor: '#4CAF50',
-  },
-  navButtonNextText: {
-    color: '#fff',
+  navButtonPrevText: {
+    color: '#DDDDE0',
     fontSize: 18,
     fontWeight: '700',
   },
+  navButtonPrevLabel: {
+    color: '#DDDDE0',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  navButtonDisabled: {
+    opacity: 0.35,
+  },
+  navButtonTextDisabled: {
+    color: '#55555E',
+  },
+  navButtonNext: {
+    backgroundColor: '#FF6B35',
+    minWidth: 120,
+    shadowColor: '#FF6B35',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  navButtonComplete: {
+    backgroundColor: '#4CAF50',
+    shadowColor: '#4CAF50',
+  },
+  navButtonNextLabel: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '800',
+    fontFamily: 'BIZUDGothic_700Bold',
+  },
+  navButtonNextIcon: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '800',
+    marginLeft: 2,
+  },
+  navCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   reSpeakButton: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: '#444',
+    backgroundColor: '#26262E',
+    borderWidth: 1,
+    borderColor: '#FF6B35',
   },
   reSpeakButtonText: {
     color: '#FF6B35',
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
   },
   dots: {
     flexDirection: 'row',
     gap: 6,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#444',
+    backgroundColor: '#3A3A44',
   },
   dotActive: {
     backgroundColor: '#FF6B35',
-    width: 20,
+    width: 22,
+  },
+  // Pro ナッジモーダル
+  nudgeOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  nudgeCard: {
+    backgroundColor: '#FFF8F0',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 360,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.3,
+    shadowRadius: 40,
+    elevation: 20,
+  },
+  nudgeEmoji: {
+    fontSize: 56,
+    marginBottom: 12,
+  },
+  nudgeTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#2A1810',
+    marginBottom: 10,
+    fontFamily: 'BIZUDGothic_700Bold',
+    textAlign: 'center',
+  },
+  nudgeBody: {
+    fontSize: 14,
+    color: '#6B5B4D',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  nudgeFeatureRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 24,
+  },
+  nudgeFeature: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#F0E5D8',
+  },
+  nudgeFeatureIcon: {
+    fontSize: 28,
+    marginBottom: 6,
+  },
+  nudgeFeatureText: {
+    fontSize: 12,
+    color: '#2A1810',
+    fontWeight: '700',
+  },
+  nudgeCta: {
+    backgroundColor: '#FF6B35',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: '#FF6B35',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  nudgeCtaText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '800',
+    fontFamily: 'BIZUDGothic_700Bold',
+  },
+  nudgeCtaSub: {
+    color: '#FFE5D4',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  nudgeDismiss: {
+    marginTop: 14,
+    fontSize: 13,
+    color: '#A0968D',
+    padding: 8,
   },
 });

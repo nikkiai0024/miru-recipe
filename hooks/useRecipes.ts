@@ -6,8 +6,6 @@ import {
   deleteRecipe,
   toggleFavorite,
   reorderRecipes as reorderRecipesStorage,
-  getMonthlyCount,
-  incrementMonthlyCount,
   addToShoppingList,
   isInitialized,
   setInitialized,
@@ -15,18 +13,14 @@ import {
 } from '../utils/storage';
 import { presetRecipes } from '../data/preset-recipes';
 
-const FREE_MONTHLY_LIMIT = 5;
-
 export function useRecipes() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
-  const [monthlyCount, setMonthlyCount] = useState(0);
   const initializingRef = useRef(false);
 
   const loadRecipes = useCallback(async () => {
     setLoading(true);
     try {
-      // 初回起動時にプリセットレシピを保存（二重実行防止）
       const initialized = await isInitialized();
       if (!initialized && !initializingRef.current) {
         initializingRef.current = true;
@@ -45,8 +39,6 @@ export function useRecipes() {
 
       const data = await getRecipes();
       setRecipes(data);
-      const count = await getMonthlyCount();
-      setMonthlyCount(count);
     } catch (e) {
       console.error('[useRecipes] loadRecipes failed:', e);
       setRecipes([]);
@@ -66,7 +58,6 @@ export function useRecipes() {
       } catch {
         throw new Error('レシピの保存に失敗しました');
       }
-      await incrementMonthlyCount();
       await loadRecipes();
     },
     [loadRecipes]
@@ -112,14 +103,9 @@ export function useRecipes() {
     [loadRecipes]
   );
 
-  const canAddRecipe = monthlyCount < FREE_MONTHLY_LIMIT;
-
   return {
     recipes,
     loading,
-    monthlyCount,
-    canAddRecipe,
-    freeLimit: FREE_MONTHLY_LIMIT,
     addRecipe,
     updateRecipe,
     removeRecipe,

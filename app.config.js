@@ -5,7 +5,7 @@ module.exports = {
   expo: {
     name: "ミルレシピ",
     slug: "miru-recipe",
-    version: "1.0.6",
+    version: "1.0.7",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -18,7 +18,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.mirurecipe.app",
-      buildNumber: "13",
+      buildNumber: "14",
       privacyPolicyUrl: "https://nikki-apps.com/mirurecipe/privacy.html",
       marketingUrl: "https://nikki-apps.com/mirurecipe/",
       infoPlist: {
@@ -52,6 +52,7 @@ module.exports = {
       "expo-sharing",
       "expo-font",
       "expo-iap",
+      "expo-secure-store",
       [
         "@sentry/react-native/expo",
         {
@@ -63,7 +64,7 @@ module.exports = {
         "react-native-google-mobile-ads",
         {
           androidAppId: "ca-app-pub-1198964108696763~9247723338",
-          iosAppId: "ca-app-pub-1198964108696763~4929204379",
+          iosAppId: "ca-app-pub-1198964108696763~1772220628",
         },
       ],
     ],

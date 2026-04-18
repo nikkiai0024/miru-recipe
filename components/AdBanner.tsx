@@ -24,8 +24,8 @@ export default function AdBanner() {
   const adUnitId = __DEV__
     ? TestIds.ADAPTIVE_BANNER
     : Platform.OS === 'ios'
-      ? 'ca-app-pub-1198964108696763/1932705052'
-      : 'ca-app-pub-1198964108696763/6387922989';
+      ? 'ca-app-pub-1198964108696763/2980897499'
+      : 'ca-app-pub-1198964108696763/6387922989'; // TODO: Android も 9247723338 配下で再発行
 
   return (
     <BannerAd

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { useTrial } from './useTrial';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
@@ -48,25 +49,57 @@ export const PRODUCT_INFO = [
     id: PRODUCTS.UNLIMITED,
     name: '無制限レシピ取り込み',
     price: '¥320',
+    priceValue: 320,
+    emoji: '📚',
+    tagline: '月の制限なし',
     description: '月5件の制限を解除。好きなだけレシピを保存できます。',
+    benefits: [
+      '今月追加5件を超えても追加OK',
+      'レシピコレクションを自由に拡張',
+      '来月まで待つストレスなし',
+    ],
   },
   {
     id: PRODUCTS.COOKING_MODE,
     name: '調理モードPro',
     price: '¥160',
-    description: 'ステップ自動読み上げ・画面左右タップで前後操作。手が汚れていても次のステップへ。',
+    priceValue: 160,
+    emoji: '👨‍🍳',
+    tagline: '料理中ずっと快適',
+    description: 'ステップ自動読み上げ・画面左右タップで前後操作。',
+    benefits: [
+      '音声読み上げで目を離さず調理',
+      '画面左右タップで前後操作 (手が汚れててもOK)',
+      'タップゾーン拡大で濡れ手にもやさしい',
+    ],
   },
   {
     id: PRODUCTS.SHOPPING_LIST,
     name: '買い物リスト',
     price: '¥160',
+    priceValue: 160,
+    emoji: '🛒',
+    tagline: 'スーパーで迷わない',
     description: 'レシピから材料を自動抽出。チェックリストでお買い物。',
+    benefits: [
+      '材料をワンタップでリスト追加',
+      '複数レシピをまとめて管理',
+      'チェックで買い忘れ防止',
+    ],
   },
   {
     id: PRODUCTS.PRO_BUNDLE,
     name: '全部入りバンドル',
     price: '¥480',
-    description: 'すべての機能をお得にアンロック！',
+    priceValue: 480,
+    emoji: '🎁',
+    tagline: '一番お得',
+    description: 'すべての機能をアンロック！個別購入より¥160お得。',
+    benefits: [
+      '上記3機能すべてを一括解放',
+      '個別購入 ¥640 → バンドル ¥480',
+      '買い切り・永久利用・追加課金なし',
+    ],
   },
 ];
 
@@ -100,6 +133,10 @@ export function usePurchase() {
   const [loading, setLoading] = useState(true);
   const purchasesRef = useRef(purchases);
   purchasesRef.current = purchases;
+
+  // トライアル中は全機能を有効化
+  const trial = useTrial();
+  const trialActive = trial.status.isActive;
 
   // In Expo Go or when expo-iap is unavailable, skip IAP entirely
   const iapAvailable = !isExpoGo && useIAP != null;
@@ -250,14 +287,25 @@ export function usePurchase() {
     })();
   }, [availablePurchases]);
 
+  const isBundleOwned = purchases[PRODUCTS.PRO_BUNDLE];
+
+  // 各機能: 個別購入 / バンドル / トライアル中のいずれかで解放
   const hasUnlimited =
-    purchases[PRODUCTS.UNLIMITED] || purchases[PRODUCTS.PRO_BUNDLE];
+    purchases[PRODUCTS.UNLIMITED] || isBundleOwned || trialActive;
 
   const hasCookingPro =
-    purchases[PRODUCTS.COOKING_MODE] || purchases[PRODUCTS.PRO_BUNDLE];
+    purchases[PRODUCTS.COOKING_MODE] || isBundleOwned || trialActive;
 
   const hasShoppingList =
-    purchases[PRODUCTS.SHOPPING_LIST] || purchases[PRODUCTS.PRO_BUNDLE];
+    purchases[PRODUCTS.SHOPPING_LIST] || isBundleOwned || trialActive;
+
+  // 実際に購入した機能 (トライアルを含まない判定、UI表示に使う)
+  const ownedUnlimited =
+    purchases[PRODUCTS.UNLIMITED] || isBundleOwned;
+  const ownedCookingPro =
+    purchases[PRODUCTS.COOKING_MODE] || isBundleOwned;
+  const ownedShoppingList =
+    purchases[PRODUCTS.SHOPPING_LIST] || isBundleOwned;
 
   return {
     purchases,
@@ -267,5 +315,13 @@ export function usePurchase() {
     hasUnlimited,
     hasCookingPro,
     hasShoppingList,
+    ownedUnlimited,
+    ownedCookingPro,
+    ownedShoppingList,
+    trialActive,
+    trialStatus: trial.status,
+    startTrialIfEligible: trial.startIfEligible,
+    shouldShowTrialEndWarning: trial.shouldShowEndWarning,
+    dismissTrialWarning: trial.dismissWarning,
   };
 }

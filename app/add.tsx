@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  Pressable,
   FlatList,
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
@@ -18,6 +19,10 @@ import { fetchVideoInfo } from '../utils/youtube';
 import { smartParse } from '../utils/parser';
 import { useRecipes } from '../hooks/useRecipes';
 import { usePurchase } from '../hooks/usePurchase';
+import { useHearts } from '../hooks/useHearts';
+import { useRewardedAd } from '../hooks/useRewardedAd';
+import { HeartBar } from '../components/HeartBar';
+import { OutOfHeartsModal } from '../components/OutOfHeartsModal';
 import { categories } from '../data/categories';
 import { detectPlatform, extractVideoId, getPlatformLabel } from '../utils/platform';
 import type { Platform as RecipePlatform } from '../utils/platform';
@@ -52,8 +57,24 @@ function guessCategory(title: string): string {
 
 export default function AddScreen() {
   const router = useRouter();
-  const { addRecipe, canAddRecipe } = useRecipes();
-  const { hasUnlimited, loading: purchaseLoading } = usePurchase();
+  const { addRecipe } = useRecipes();
+  const { hasUnlimited, trialActive, ownedUnlimited, loading: purchaseLoading } = usePurchase();
+  const hearts = useHearts();
+  const rewardedAd = useRewardedAd();
+  const [outOfHeartsVisible, setOutOfHeartsVisible] = useState(false);
+
+  const handleWatchAdForHeart = async () => {
+    try {
+      await rewardedAd.show();
+      await hearts.addBonus();
+      setOutOfHeartsVisible(false);
+    } catch (e: any) {
+      Alert.alert(
+        '広告を読み込めませんでした',
+        'しばらく時間をおいてお試しください。'
+      );
+    }
+  };
 
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -86,15 +107,9 @@ export default function AddScreen() {
   }, [url]);
 
   const handleFetch = async () => {
-    if (!canAddRecipe && !hasUnlimited && !purchaseLoading) {
-      Alert.alert(
-        '月間制限',
-        '無料版は月5件までです。Pro版にアップグレードすると無制限に追加できます。',
-        [
-          { text: 'キャンセル', style: 'cancel' },
-          { text: 'Pro版を見る', onPress: () => router.push('/pro') },
-        ]
-      );
+    // 無制限ユーザー or トライアル中 or ハート残あり で追加可能
+    if (!hasUnlimited && !purchaseLoading && !hearts.loading && hearts.currentHearts <= 0) {
+      setOutOfHeartsVisible(true);
       return;
     }
 
@@ -262,6 +277,14 @@ export default function AddScreen() {
     };
 
     try {
+      // 無制限以外: ハート消費 (原子的: 失敗したら追加しない)
+      if (!hasUnlimited) {
+        const consumed = await hearts.consume();
+        if (!consumed) {
+          setOutOfHeartsVisible(true);
+          return;
+        }
+      }
       await addRecipe(recipe);
       router.back();
     } catch (e: any) {
@@ -339,6 +362,53 @@ export default function AddScreen() {
             YouTube・Cookpad・レシピサイト対応{'\n'}TikTokはタイトルのみ自動取得
           </Text>
 
+          {/* クレジット状況 (ハート制) */}
+          {trialActive ? (
+            <TouchableOpacity
+              style={styles.trialBar}
+              onPress={() => router.push('/pro')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.trialBarEmoji}>🎁</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.trialBarTitle}>Pro全機能お試し中</Text>
+                <Text style={styles.trialBarSub}>
+                  終了後も使い続けるなら バンドル ¥480 で維持
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ) : ownedUnlimited ? null : (
+            <TouchableOpacity
+              style={[
+                styles.limitStatusBar,
+                hearts.currentHearts === 0 && styles.limitStatusBarReached,
+                hearts.currentHearts > 0 && hearts.currentHearts <= 1 && styles.limitStatusBarWarning,
+              ]}
+              onPress={() => router.push('/pro')}
+              activeOpacity={0.85}
+            >
+              <View style={{ flex: 1 }}>
+                <View style={styles.creditRow}>
+                  <HeartBar
+                    current={hearts.currentHearts}
+                    max={hearts.maxHearts}
+                    timeToNextLabel={hearts.timeToNextLabel}
+                    isFull={hearts.isFull}
+                    compact
+                  />
+                </View>
+                <Text style={styles.limitStatusSub}>
+                  {hearts.currentHearts === 0
+                    ? `あと${hearts.timeToNextLabel}で+1回復 · Proなら¥320で無制限`
+                    : hearts.currentHearts === 1
+                      ? `残り1個 · 次まで${hearts.timeToNextLabel}`
+                      : `1レシピ=1クレジット消費 · 1日1個回復`}
+                </Text>
+              </View>
+              <Text style={styles.limitStatusArrow}>›</Text>
+            </TouchableOpacity>
+          )}
+
           <TextInput
             style={styles.urlInput}
             placeholder={getPlaceholderText()}
@@ -385,6 +455,17 @@ export default function AddScreen() {
             )}
           </TouchableOpacity>
         </View>
+        <OutOfHeartsModal
+          visible={outOfHeartsVisible}
+          timeToNextLabel={hearts.timeToNextLabel}
+          onClose={() => setOutOfHeartsVisible(false)}
+          onUpgrade={() => {
+            setOutOfHeartsVisible(false);
+            router.push('/pro');
+          }}
+          onWatchAd={rewardedAd.available ? handleWatchAdForHeart : undefined}
+          watchAdReady={rewardedAd.loaded}
+        />
       </KeyboardAvoidingView>
     );
   }
@@ -583,6 +664,19 @@ export default function AddScreen() {
           ⚠️ ソースの内容によっては材料・手順が正しく取得できない場合があります。動画の説明欄が未整理の場合や、音声で手順を説明していない動画では自動取得の精度が下がることがあります。取得後は内容をご確認ください。
         </Text>
       </ScrollView>
+      <OutOfHeartsModal
+        visible={outOfHeartsVisible}
+        timeToNextLabel={hearts.timeToNextLabel}
+        onClose={() => setOutOfHeartsVisible(false)}
+        onUpgrade={() => {
+          setOutOfHeartsVisible(false);
+          router.push('/pro');
+        }}
+        onWatchAd={__DEV__ ? async () => {
+          await hearts.addBonus();
+          setOutOfHeartsVisible(false);
+        } : undefined}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -639,6 +733,170 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 13,
     color: '#FF6B35',
+  },
+  limitStatusBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFF3E8',
+    borderWidth: 1,
+    borderColor: '#FFD4BF',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginBottom: 16,
+  },
+  limitStatusBarWarning: {
+    backgroundColor: '#FFF3E8',
+    borderColor: '#FFB380',
+  },
+  limitStatusBarReached: {
+    backgroundColor: '#FFE5E0',
+    borderColor: '#FFB7A5',
+  },
+  creditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  limitStatusSub: {
+    fontSize: 11,
+    color: '#6B5B4D',
+    fontWeight: '500',
+  },
+  limitStatusArrow: {
+    fontSize: 24,
+    color: '#FF6B35',
+    fontWeight: '800',
+  },
+  trialBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    backgroundColor: '#2A1810',
+    borderRadius: 14,
+    marginBottom: 16,
+  },
+  trialBarEmoji: {
+    fontSize: 28,
+  },
+  trialBarTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFD166',
+    fontFamily: 'BIZUDGothic_700Bold',
+  },
+  trialBarSub: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginTop: 2,
+  },
+  // ハート切れモーダル
+  nudgeOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  nudgeCard: {
+    backgroundColor: '#FFF8F0',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 380,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.3,
+    shadowRadius: 40,
+    elevation: 20,
+  },
+  nudgeEmoji: {
+    fontSize: 56,
+    marginBottom: 12,
+  },
+  nudgeTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#2A1810',
+    marginBottom: 8,
+    fontFamily: 'BIZUDGothic_700Bold',
+    textAlign: 'center',
+  },
+  nudgeBody: {
+    fontSize: 13,
+    color: '#6B5B4D',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 18,
+  },
+  nudgeWait: {
+    width: '100%',
+    padding: 14,
+    backgroundColor: '#FFF0E6',
+    borderRadius: 14,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  nudgeWaitLabel: {
+    fontSize: 12,
+    color: '#8A7A6D',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  nudgeWaitValue: {
+    fontSize: 20,
+    color: '#FF6B35',
+    fontWeight: '800',
+    fontFamily: 'BIZUDGothic_700Bold',
+  },
+  nudgeUnlockRow: {
+    width: '100%',
+    gap: 10,
+  },
+  nudgePrimary: {
+    backgroundColor: '#FF6B35',
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    shadowColor: '#FF6B35',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  nudgePrimaryText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+    fontFamily: 'BIZUDGothic_700Bold',
+  },
+  nudgePrimarySub: {
+    color: '#FFE5D4',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  nudgeSecondary: {
+    backgroundColor: '#fff',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#F0E5D8',
+  },
+  nudgeSecondaryText: {
+    color: '#6B5B4D',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  nudgeDismiss: {
+    marginTop: 14,
+    fontSize: 13,
+    color: '#A0968D',
+    padding: 8,
   },
   fetchButton: {
     backgroundColor: '#FF6B35',
