@@ -177,7 +177,9 @@ export default function AddScreen() {
           fetchYouTubeTranscript(vid).catch(() => ""),
           fetchVideoComments(vid).catch(() => ""),
         ]);
-        const aiResult = await fetchStepsFromTranscript(vid, transcriptText || undefined, commentText || undefined);
+        const fallbackText = `${info.title}\n\n${info.description}`;
+        const aiSourceText = transcriptText || fallbackText;
+        const aiResult = await fetchStepsFromTranscript(vid, aiSourceText || undefined, commentText || undefined);
         if (aiResult.steps.length > 0 && result.steps.length === 0) {
           setSteps(aiResult.steps.map(s => ({
             number: s.number,

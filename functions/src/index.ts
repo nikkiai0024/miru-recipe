@@ -230,13 +230,14 @@ export const getRecipeSteps = onRequest(
       return;
     }
 
-    const prompt = `以下はYouTube料理動画の字幕テキストです。
+    const prompt = `以下はYouTube料理動画の字幕・説明欄テキストです。
 材料と調理手順をJSONで返してください。
 
 要件:
 - 材料: 動画で使われる食材・調味料をすべて抽出（分量も可能な限り含める）
 - 手順: 調理の具体的な手順を最初から最後まですべて抽出（挨拶・自己紹介・チャンネル登録は除外）
 - 手順は省略せず、調理開始から盛り付け・完成まで漏れなく含めること
+- 明示的な手順がない場合でも、料理名と材料から自然な調理工程を補完すること
 - 日本語・体言止め
 - ステップ数に上限なし（実際の調理工程に忠実に）
 - JSONのみ返す
@@ -244,7 +245,7 @@ export const getRecipeSteps = onRequest(
 出力フォーマット:
 {"steps":[{"number":1,"text":"手順"}],"ingredients":[{"name":"食材名","amount":"量"}]}
 
-字幕:
+字幕・説明欄:
 ${transcriptText.slice(0, maxTranscriptChars)}${commentText ? `
 
 コメント欄の情報も参考に（材料・分量参照）:
