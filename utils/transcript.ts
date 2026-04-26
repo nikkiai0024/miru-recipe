@@ -82,21 +82,32 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<string> {
   const xmlRes = await fetch(cleanUrl);
   const xml = await xmlRes.text();
   if (__DEV__) console.log("[transcript] xml length:", xml.length, "sample:", xml.slice(0, 80));
+  if (!xml.includes("<timedtext")) {
+    throw new Error("Invalid transcript response");
+  }
 
   // XMLからテキスト抽出（format=3の<p><s>タグとformat=1の<text>タグ両対応）
   const decode = (s: string) =>
     s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
      .replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&nbsp;/g, " ");
+  const textFromXmlNode = (node: string) =>
+    decode(node.replace(/<[^>]+>/g, "").trim());
 
   let rawTexts: string[] = [];
   if (xml.includes('format="3"')) {
     // format=3: <p t="..."><s>テキスト</s></p>
     rawTexts = (xml.match(/<s[^>]*>([^<]+)<\/s>/g) || [])
-      .map((t) => decode(t.replace(/<[^>]+>/g, "").trim()));
+      .map(textFromXmlNode);
+
+    // 手動字幕では <p t="...">テキスト</p> の場合がある
+    if (rawTexts.length === 0) {
+      rawTexts = (xml.match(/<p[^>]*>(.*?)<\/p>/g) || [])
+        .map(textFromXmlNode);
+    }
   } else {
     // format=1: <text start="...">テキスト</text>
     rawTexts = (xml.match(/<text[^>]*>(.*?)<\/text>/g) || [])
-      .map((t) => decode(t.replace(/<[^>]+>/g, "").trim()));
+      .map(textFromXmlNode);
   }
   const texts = rawTexts.filter((t) => t && !t.startsWith("["));
 

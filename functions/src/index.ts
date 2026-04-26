@@ -2,13 +2,66 @@ import {setGlobalOptions} from "firebase-functions";
 import {onRequest} from "firebase-functions/v2/https";
 import {defineSecret} from "firebase-functions/params";
 import {GoogleGenAI} from "@google/genai";
-import * as https from "https";
 
 setGlobalOptions({maxInstances: 10});
 
 const appSecret = defineSecret("APP_SECRET");
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const youtubeApiKey = defineSecret("YOUTUBE_API_KEY");
+const iosBundleIdentifier = "com.mirurecipe.app";
+const youtubeUserAgent = [
+  "Mozilla/5.0 (Linux; Android 10; SM-G981B)",
+  "AppleWebKit/537.36 Chrome/80 Mobile Safari/537.36",
+].join(" ");
+
+interface CaptionTrack {
+  baseUrl?: string;
+  languageCode: string;
+}
+
+interface PlayerResponse {
+  captions?: {
+    playerCaptionsTracklistRenderer?: {
+      captionTracks?: CaptionTrack[];
+    };
+  };
+}
+
+/**
+ * Decode one YouTube caption XML node into plain text.
+ * @param {string} node - Raw XML node
+ * @return {string} Decoded text
+ */
+function decodeCaptionNode(node: string): string {
+  return node
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, "\"")
+    .replace(/&nbsp;/g, " ")
+    .trim();
+}
+
+/**
+ * Extract captions from known YouTube XML formats.
+ * @param {string} xml - Caption XML body
+ * @return {string} Joined transcript text
+ */
+function extractCaptionText(xml: string): string {
+  let texts = (xml.match(/<text[^>]*>(.*?)<\/text>/g) || [])
+    .map(decodeCaptionNode);
+  if (texts.length === 0) {
+    texts = (xml.match(/<s[^>]*>([^<]+)<\/s>/g) || [])
+      .map(decodeCaptionNode);
+  }
+  if (texts.length === 0) {
+    texts = (xml.match(/<p[^>]*>(.*?)<\/p>/g) || [])
+      .map(decodeCaptionNode);
+  }
+  return texts.filter((text) => text).join(" ");
+}
 
 /**
  * YouTube字幕をInnerTube API経由で取得
@@ -16,51 +69,55 @@ const youtubeApiKey = defineSecret("YOUTUBE_API_KEY");
  * @return {Promise<string>} 字幕テキスト
  */
 async function fetchYouTubeTranscript(videoId: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = `https://www.youtube.com/watch?v=${videoId}`;
-    https.get(url, {headers: {"User-Agent": "Mozilla/5.0"}}, (res) => {
-      let html = "";
-      res.on("data", (chunk) => (html += chunk));
-      res.on("end", () => {
-        const match = html.match(/"captionTracks":(\[.*?\])/);
-        if (!match) {
-          reject(new Error("No captions found"));
-          return;
-        }
-        try {
-          const tracks = JSON.parse(match[1]);
-          const track =
-            tracks.find((t: {languageCode: string}) =>
-              t.languageCode.startsWith("ja")
-            ) || tracks[0];
-          if (!track?.baseUrl) {
-            reject(new Error("No track URL"));
-            return;
-          }
-          https.get(track.baseUrl, (r2) => {
-            let xml = "";
-            r2.on("data", (c) => (xml += c));
-            r2.on("end", () => {
-              const texts = (xml.match(/<text[^>]*>(.*?)<\/text>/g) || [])
-                .map((t) =>
-                  t
-                    .replace(/<[^>]+>/g, "")
-                    .replace(/&amp;/g, "&")
-                    .replace(/&lt;/g, "<")
-                    .replace(/&gt;/g, ">")
-                    .replace(/&#39;/g, "\"")
-                    .replace(/&quot;/g, "\"")
-                )
-                .filter((t) => t.trim());
-              resolve(texts.join(" "));
-            });
-          }).on("error", reject);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    }).on("error", reject);
+  const watchRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+    headers: {
+      "User-Agent": youtubeUserAgent,
+      "Accept-Language": "ja,en;q=0.9",
+    },
   });
+  const html = await watchRes.text();
+  const apiKey = html.match(/"INNERTUBE_API_KEY":\s*"([a-zA-Z0-9_-]+)"/)?.[1];
+  if (!apiKey) {
+    throw new Error("Could not find INNERTUBE_API_KEY");
+  }
+
+  const playerRes = await fetch(
+    `https://www.youtube.com/youtubei/v1/player?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        context: {
+          client: {clientName: "ANDROID", clientVersion: "20.10.38"},
+        },
+        videoId,
+      }),
+    }
+  );
+  const playerData = await playerRes.json() as PlayerResponse;
+  const captionTracks =
+    playerData.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+  if (!captionTracks || captionTracks.length === 0) {
+    throw new Error("No caption tracks");
+  }
+
+  const track =
+    captionTracks.find((t) => t.languageCode.startsWith("ja")) ||
+    captionTracks[0];
+  if (!track.baseUrl) {
+    throw new Error("No track URL");
+  }
+
+  const xmlRes = await fetch(track.baseUrl.replace(/&fmt=\d+/g, "") + "&fmt=1");
+  const xml = await xmlRes.text();
+  if (!xml.includes("<timedtext")) {
+    throw new Error("Invalid transcript response");
+  }
+  const text = extractCaptionText(xml);
+  if (!text) {
+    throw new Error("No transcript text");
+  }
+  return text;
 }
 
 /**
@@ -96,7 +153,9 @@ export const getVideoInfo = onRequest(
     const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`;
 
     try {
-      const apiRes = await fetch(apiUrl);
+      const apiRes = await fetch(apiUrl, {
+        headers: {"X-Ios-Bundle-Identifier": iosBundleIdentifier},
+      });
       if (!apiRes.ok) {
         res.status(apiRes.status).json({
           error: `YouTube API error: ${apiRes.status}`,
@@ -212,5 +271,3 @@ ${commentText.slice(0, 3000)}` : ""}`;
     }
   }
 );
-
-
