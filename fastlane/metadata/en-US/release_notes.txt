@@ -1,1 +1,4 @@
-Improved YouTube recipe import accuracy.
+Improved YouTube recipe import reliability.
+- AI can now generate cooking steps from the video description when captions are unavailable.
+- Improved parsing for ingredients and serving sizes in YouTube descriptions.
+- Fixed production API authentication for YouTube recipe imports.
