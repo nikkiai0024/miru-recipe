@@ -13,6 +13,7 @@ const youtubeUserAgent = [
   "Mozilla/5.0 (Linux; Android 10; SM-G981B)",
   "AppleWebKit/537.36 Chrome/80 Mobile Safari/537.36",
 ].join(" ");
+const maxTranscriptChars = 30000;
 
 interface CaptionTrack {
   baseUrl?: string;
@@ -244,7 +245,7 @@ export const getRecipeSteps = onRequest(
 {"steps":[{"number":1,"text":"手順"}],"ingredients":[{"name":"食材名","amount":"量"}]}
 
 字幕:
-${transcriptText.slice(0, 10000)}${commentText ? `
+${transcriptText.slice(0, maxTranscriptChars)}${commentText ? `
 
 コメント欄の情報も参考に（材料・分量参照）:
 ${commentText.slice(0, 3000)}` : ""}`;

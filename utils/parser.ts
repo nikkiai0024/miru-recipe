@@ -61,7 +61,8 @@ const AMOUNT_PATTERN_SINGLE = new RegExp(
 
 const BULLET_PREFIX = /^[・\-\*•■▪▸▹►▻→⇒☆★◆◇○●]\s*/;
 
-const INGREDIENT_SECTION_HEADERS = /材料/;
+const INGREDIENT_SECTION_HEADERS =
+  /材料|今回のレシピ|レシピはこちら|今回の料理|今回作るもの/;
 // ⚠️ 「レシピ」は動画タイトルに含まれやすいので除外。明確なセクション表記のみ
 const STEP_SECTION_HEADERS = /【作り方|【手順|■作り方|■手順|▼作り方|▼手順|〜作り方|～作り方|━+作り方|={2,}作り方|^作り方$|^手順$|^ステップ$/;
 
@@ -101,7 +102,10 @@ function normalizeNumber(s: string): string {
 // ══════════════════════════════════════════════════
 
 export function parseDescription(description: string): ParsedRecipe {
-  const ingredients = parseIngredientsFromDescription(description);
+  let ingredients = parseIngredientsFromDescription(description);
+  if (ingredients.length === 0) {
+    ingredients = parseLooseIngredientsFromDescription(description);
+  }
   const steps = parseStepsFromDescription(description);
   const servings = parseServings(description);
 
@@ -153,6 +157,14 @@ function parseIngredientLine(line: string): Ingredient | null {
   // Strip bullet prefix
   const cleaned = line.replace(BULLET_PREFIX, '').trim();
   if (!cleaned || cleaned.length > 120) return null;
+  if (/^[\-ー─━=＿\s]+$/.test(cleaned)) return null;
+  if (/^※/.test(cleaned) && !AMOUNT_PATTERN_SINGLE.test(cleaned)) return null;
+  if (/^【.+】(?:[（(].*[）)])?$/.test(cleaned) && !AMOUNT_PATTERN_SINGLE.test(cleaned)) {
+    return null;
+  }
+  if (/^(?:★|※)?(?:詳しい|動画|チャンネル|登録|概要欄|コメント|ポイント|味変|提供|PR|http|#)/.test(cleaned)) {
+    return null;
+  }
 
   // Pattern: "name  amount" (2+ spaces or full-width space)
   const splitMatch =
@@ -170,8 +182,8 @@ function parseIngredientLine(line: string): Ingredient | null {
     return { name: colonMatch[1].trim(), amount: normalizeNumber(colonMatch[2].trim()) };
   }
 
-  // Pattern: "name…amount" (dots as separator)
-  const dotMatch = cleaned.match(/^(.+?)[…]{1,}(.+)$/);
+  // Pattern: "name････amount" or "name…amount" (dots as separator)
+  const dotMatch = cleaned.match(/^(.+?)[.．・･…]{2,}(.+)$/);
   if (dotMatch) {
     return { name: dotMatch[1].trim(), amount: normalizeNumber(dotMatch[2].trim()) };
   }
@@ -189,6 +201,27 @@ function parseIngredientLine(line: string): Ingredient | null {
 
   // Plain text ingredient with no amount
   return { name: cleaned, amount: '' };
+}
+
+function parseLooseIngredientsFromDescription(text: string): Ingredient[] {
+  const ingredients: Ingredient[] = [];
+  const seen = new Set<string>();
+
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || /^https?:\/\//.test(trimmed)) continue;
+    if (!AMOUNT_PATTERN_SINGLE.test(trimmed)) continue;
+
+    const ingredient = parseIngredientLine(trimmed);
+    if (!ingredient || !ingredient.amount) continue;
+
+    const key = `${ingredient.name}:${ingredient.amount}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    ingredients.push(ingredient);
+  }
+
+  return ingredients;
 }
 
 function parseStepsFromDescription(text: string): RecipeStep[] {
@@ -673,10 +706,9 @@ function findTimestampForStep(
 
 function parseServings(text: string): string {
   const match =
-    text.match(/[（(](\d+人分)[）)]/) ||
-    text.match(/(\d+人分)/) ||
-    text.match(/(\d+人前)/);
-  return match ? match[1] : '';
+    text.match(/[（(]([0-9０-９]+(?:\s*[~〜～-]\s*[0-9０-９]+)?\s*人[分前])[）)]/) ||
+    text.match(/([0-9０-９]+(?:\s*[~〜～-]\s*[0-9０-９]+)?\s*人[分前])/);
+  return match ? normalizeNumber(match[1]).replace(/\s+/g, '') : '';
 }
 
 // ══════════════════════════════════════════════════

@@ -13,6 +13,7 @@ export interface AIIngredient {
 
 const FUNCTION_URL =
   "https://getrecipesteps-ivjrmq62mq-an.a.run.app";
+const MAX_TRANSCRIPT_CHARS = 30000;
 
 const APP_SECRET = Constants.expoConfig?.extra?.appSecret ?? "";
 
@@ -36,7 +37,7 @@ export async function fetchStepsFromTranscript(videoId: string, transcriptText?:
     if (__DEV__) console.log("[AI] Sending to Firebase Function...");
     const body: Record<string, string> = { secret: APP_SECRET };
     if (transcriptText && transcriptText.length >= 50) {
-      body.transcriptText = transcriptText.slice(0, 10000);
+      body.transcriptText = transcriptText.slice(0, MAX_TRANSCRIPT_CHARS);
     } else {
       body.videoId = videoId;
     }

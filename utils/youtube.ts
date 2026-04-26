@@ -10,6 +10,8 @@ export interface VideoInfo {
 
 const PROXY_URL = 'https://asia-northeast1-miru-recipe-backend-cac53.cloudfunctions.net/getVideoInfo';
 const APP_SECRET = Constants.expoConfig?.extra?.appSecret ?? '';
+const CONFIG_ERROR_MESSAGE =
+  'YouTube動画情報の取得設定に問題があります。アプリを最新版に更新してください。';
 
 /**
  * YouTube URLからvideoIdを抽出
@@ -45,8 +47,12 @@ export async function fetchVideoInfo(videoId: string): Promise<VideoInfo> {
     });
     clearTimeout(timeoutId);
 
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(CONFIG_ERROR_MESSAGE);
+    }
+
     if (!response.ok) {
-      // プロキシ失敗時はoEmbedにフォールバック
+      // 一時的なプロキシ失敗時はoEmbedにフォールバック
       return fetchViaOEmbed(videoId);
     }
 
@@ -58,7 +64,10 @@ export async function fetchVideoInfo(videoId: string): Promise<VideoInfo> {
       thumbnailUrl: data.thumbnailUrl ?? '',
       channelTitle: data.channelTitle ?? '',
     };
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.message === CONFIG_ERROR_MESSAGE) {
+      throw e;
+    }
     // ネットワークエラー・タイムアウト時はoEmbedにフォールバック
     return fetchViaOEmbed(videoId);
   }
